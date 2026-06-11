@@ -1,6 +1,6 @@
 # Flight Seat Reservation System
 
-A concurrent seat booking engine built in Python — demonstrating pessimistic locking, hold/expiry lifecycle management, and race condition prevention under real concurrent load.
+A concurrent seat booking engine built in Python demonstrating pessimistic locking, hold/expiry lifecycle management, and race condition prevention under real concurrent load.
 
 ---
 
@@ -53,7 +53,7 @@ WHERE id = $1 AND flight_id = $2
 FOR UPDATE;
 ```
 
-This acquires a row-level lock for the duration of the transaction. PostgreSQL queues all concurrent requests for the same row. The second transaction doesn't even read the row until the first commits — at which point it sees `status = held` and raises `SeatNotAvailable`.
+This acquires a row-level lock for the duration of the transaction. PostgreSQL queues all concurrent requests for the same row. The second transaction doesn't even read the row until the first commits, at which point it sees `status = held` and raises `SeatNotAvailable`.
 
 **Why not optimistic locking?** The version column exists as a fallback, but optimistic locking causes retry storms under high contention. For a seat booking scenario where contention is the entire problem, pessimistic locking is the correct choice.
 
@@ -120,7 +120,7 @@ Seats are modelled with `row_number`, `column_letter`, `is_window`, `is_aisle`, 
 ============================================================
 ```
 
-The timing distribution is itself evidence of correctness. The winner acquires the lock in ~180ms. Everyone else waits ~1.6 seconds — the duration of the winning transaction holding the lock. That 1.4-second gap is PostgreSQL's queue.
+The timing distribution is itself evidence of correctness. The winner acquires the lock in ~180ms. Everyone else waits ~1.6 seconds; the duration of the winning transaction holding the lock. That 1.4-second gap is PostgreSQL's queue.
 
 ---
 
@@ -136,7 +136,7 @@ The timing distribution is itself evidence of correctness. The winner acquires t
 | GET /flights/{id}/seats | 219 | 0 | 9 | 2100 |
 | **Aggregated** | **836** | **0** | **9** | **2100** |
 
-**836 requests, 0 failures.** The 99th percentile spike on seat map is payload size (172 seats as JSON) — a caching concern, not a correctness concern.
+**836 requests, 0 failures.** The 99th percentile spike on seat map is payload size (172 seats as JSON); a caching concern, not a correctness concern.
 
 ---
 
@@ -195,8 +195,8 @@ FRsystem/
 
 ```bash
 # 1. Clone and install
-git clone <repo>
-cd flight_booking
+git clone https://github.com/KrishAtGit/flight-reservation-system.git
+cd FRsystem
 pip install -r requirements.txt
 
 # 2. Configure
@@ -237,8 +237,8 @@ locust -f scripts/locustfile.py --host http://localhost:8000
 
 ## Some interesting features to add
 
-- **JWT authentication** — user_id currently passed in request body; in production it comes from a decoded token in the Authorization header
-- **Redis distributed locking** — for horizontal scaling across multiple API instances where a single PostgreSQL lock isn't sufficient
-- **Seat map caching** — Redis cache for `GET /flights/{id}/seats` with cache invalidation on status change; solves the 99th percentile latency spike
-- **Kubernetes deployment** — HPA on the API pods, single ExpiryWorker pod to avoid duplicate expiry runs
-- **Idempotency keys** — prevent duplicate bookings from network retries
+- **JWT authentication** : user_id currently passed in request body; in production it comes from a decoded token in the Authorization header
+- **Redis distributed locking** : for horizontal scaling across multiple API instances where a single PostgreSQL lock isn't sufficient
+- **Seat map caching** : Redis cache for `GET /flights/{id}/seats` with cache invalidation on status change; solves the 99th percentile latency spike
+- **Kubernetes deployment** : HPA on the API pods, single ExpiryWorker pod to avoid duplicate expiry runs
+- **Idempotency keys** : prevent duplicate bookings from network retries
