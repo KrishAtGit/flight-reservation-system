@@ -75,7 +75,7 @@ The expiry worker maintains a min-heap ordered by `expires_at`:
 heapq.heappush(heap, HoldEntry(expires_at, hold_id, seat_id, user_id))
 ```
 
-On each scheduler tick, it pops all entries where `expires_at <= now()` in O(k log n) where k is the number of expired holds. This is contrasted with the naive approach — a full table scan every N seconds — which is O(n) regardless of how many holds are actually expired.
+On each scheduler tick, it pops all entries where `expires_at <= now()` in O(k log n) where k is the number of expired holds. This is contrasted with the naive approach; a full table scan every N seconds, which is O(n) regardless of how many holds are actually expired.
 
 The DB sweep still runs as a safety net for holds created before a server restart (when the heap is empty).
 
