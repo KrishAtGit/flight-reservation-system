@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# Virtual environment — never goes in the image
+venv/
+env/
+.venv/
+
+# Local env file — secrets never in image
+.env
+
+# Test scripts — not needed in production image
+scripts/test_*.py
+scripts/locustfile.py
+
+# Git
+.git/
+.gitignore
+
+# Dev tools
+.pytest_cache/
+.coverage
