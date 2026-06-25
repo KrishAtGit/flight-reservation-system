@@ -1,0 +1,47 @@
+{
+  "family": "flight-reservation",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::573562677594:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "flight-reservation",
+      "image": "573562677594.dkr.ecr.ap-southeast-2.amazonaws.com/flight-reservation:latest",
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "DATABASE_URL",
+          "value": "postgresql+asyncpg://postgres:FlightDB2024!@flight-booking-db.cr2som8eghud.ap-southeast-2.rds.amazonaws.com:5432/flight_booking"
+        },
+        {
+          "name": "SYNC_DATABASE_URL",
+          "value": "postgresql://postgres:FlightDB2024!@flight-booking-db.cr2som8eghud.ap-southeast-2.rds.amazonaws.com:5432/flight_booking"
+        },
+        {
+          "name": "SEAT_HOLD_MINUTES",
+          "value": "10"
+        },
+        {
+          "name": "SECRET_KEY",
+          "value": "changeme-replace-before-production"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "ecs-flight-reservation",
+          "awslogs-region": "ap-southeast-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "essential": true
+    }
+  ]
+}

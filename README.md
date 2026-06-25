@@ -4,11 +4,29 @@ A concurrent seat booking engine built in Python demonstrating pessimistic locki
 
 ---
 
+## Live Demo
+
+**API Docs:** http://52.63.178.177:8000/docs 
+
+**Health:** http://52.63.178.177:8000/health
+
+Deployed on AWS ECS Fargate (Sydney) with RDS PostgreSQL.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /flights/` | List available flights |
+| `GET /flights/{id}/seats` | View physical seat map |
+| `POST /holds` | Hold a seat (race condition demo) |
+| `POST /bookings` | Confirm a booking |
+| `GET /health` | Health check |
+
+---
+
 ## What this is
 
 A backend system that solves the hardest problem in ticket booking: **two users clicking "book" on the same seat at the same millisecond**. The system guarantees exactly one booking wins, every time, without sacrificing throughput.
 
-Built as a portfolio project targeting backend/cloud engineering internships. Every design decision was made to mirror real booking infrastructure — not to look impressive in a README.
+Built as a portfolio project targeting backend/cloud engineering where every design decision was made to mirror real booking infrastructure.
 
 ---
 
@@ -29,7 +47,7 @@ Built as a portfolio project targeting backend/cloud engineering internships. Ev
 │  cancel_booking()   BOOKED → AVAILABLE                  │
 └──────────────┬──────────────────────┬───────────────────┘
                │                      │
-┌──────────────▼────── ┐  ┌────────────▼──────────────────┐
+┌──────────────▼──────┐  ┌────────────▼──────────────────┐
 │   PostgreSQL         │  │   ExpiryWorker                │
 │                      │  │                               │
 │   Seats (with        │  │   HoldExpiryHeap (min-heap)   │
@@ -57,7 +75,7 @@ This acquires a row-level lock for the duration of the transaction. PostgreSQL q
 
 **Why not optimistic locking?** The version column exists as a fallback, but optimistic locking causes retry storms under high contention. For a seat booking scenario where contention is the entire problem, pessimistic locking is the correct choice.
 
-**Why not application-level locking (Redis)?** Adds a dependency and a failure mode. PostgreSQL row locks are transactional — they automatically release on commit or rollback. A Redis lock requires TTL management and can leave phantom locks if the process crashes.
+**Why not application-level locking (Redis)?** Adds a dependency and a failure mode. PostgreSQL row locks are transactional; they automatically release on commit or rollback. A Redis lock requires TTL management and can leave phantom locks if the process crashes.
 
 ### 2. SeatHold as a separate table
 
@@ -75,7 +93,7 @@ The expiry worker maintains a min-heap ordered by `expires_at`:
 heapq.heappush(heap, HoldEntry(expires_at, hold_id, seat_id, user_id))
 ```
 
-On each scheduler tick, it pops all entries where `expires_at <= now()` in O(k log n) where k is the number of expired holds. This is contrasted with the naive approach; a full table scan every N seconds, which is O(n) regardless of how many holds are actually expired.
+On each scheduler tick, it pops all entries where `expires_at <= now()` in O(k log n) where k is the number of expired holds. This is contrasted with the naive approach, i.e, a full table scan every N seconds, which is O(n) regardless of how many holds are actually expired.
 
 The DB sweep still runs as a safety net for holds created before a server restart (when the heap is empty).
 
@@ -95,7 +113,7 @@ Seats are modelled with `row_number`, `column_letter`, `is_window`, `is_aisle`, 
 
 ```
 ============================================================
-  CONCURRENCY TEST — 50 simultaneous requests
+  CONCURRENCY TEST -- 50 simultaneous requests
 ============================================================
   Flight:  QF401 MEL→SYD
   Seat:    1A [first] $850.00
@@ -120,7 +138,7 @@ Seats are modelled with `row_number`, `column_letter`, `is_window`, `is_aisle`, 
 ============================================================
 ```
 
-The timing distribution is itself evidence of correctness. The winner acquires the lock in ~180ms. Everyone else waits ~1.6 seconds; the duration of the winning transaction holding the lock. That 1.4-second gap is PostgreSQL's queue.
+The timing distribution is itself evidence of correctness. The winner acquires the lock in ~180ms. Everyone else waits ~1.6 seconds, the duration of the winning transaction holding the lock. That 1.4-second gap is PostgreSQL's queue.
 
 ---
 
@@ -136,7 +154,7 @@ The timing distribution is itself evidence of correctness. The winner acquires t
 | GET /flights/{id}/seats | 219 | 0 | 9 | 2100 |
 | **Aggregated** | **836** | **0** | **9** | **2100** |
 
-**836 requests, 0 failures.** The 99th percentile spike on seat map is payload size (172 seats as JSON); a caching concern, not a correctness concern.
+**836 requests, 0 failures.** The 99th percentile spike on seat map is payload size (172 seats as JSON), a caching concern, not a correctness concern.
 
 ---
 
@@ -147,9 +165,24 @@ The timing distribution is itself evidence of correctness. The winner acquires t
 | API | FastAPI + uvicorn | Async-native, auto-generates OpenAPI docs |
 | ORM | SQLAlchemy 2.0 async | Full async support, explicit transaction control |
 | Database | PostgreSQL | Row-level locking, ACID transactions |
+| Database (prod) | AWS RDS PostgreSQL | Managed PostgreSQL in ap-southeast-2 |
 | Driver | asyncpg | Fastest async PostgreSQL driver for Python |
 | Scheduling | APScheduler | Async-compatible background job scheduler |
 | Load testing | Locust | Scriptable, realistic user flow simulation |
+| Container | Docker | Reproducible builds, ECR image registry |
+| Runtime | AWS ECS Fargate | Serverless container execution, no server management |
+
+---
+
+## Deployment
+
+Containerised and deployed to AWS:
+
+- **Docker image** pushed to AWS ECR (ap-southeast-2)
+- **ECS Fargate** : 256 CPU / 512MB task, serverless container runtime
+- **RDS PostgreSQL** : db.t3.micro managed database
+- **Security groups** : port 8000 open, port 5432 restricted to VPC
+- **GitHub Actions CI/CD** : auto-deploy on push to main (in progress)
 
 ---
 
@@ -182,8 +215,9 @@ FRsystem/
 │   ├── test_concurrency.py
 │   ├── test_expiry.py
 │   └── locustfile.py
+├── Dockerfile
+├── task-definition.json
 ├── tests/
-├── .env
 ├── .env.example
 ├── requirements.txt
 └── README.md
@@ -235,10 +269,11 @@ locust -f scripts/locustfile.py --host http://localhost:8000
 
 ---
 
-## Some interesting features to add
+## What I'd add next
 
 - **JWT authentication** : user_id currently passed in request body; in production it comes from a decoded token in the Authorization header
 - **Redis distributed locking** : for horizontal scaling across multiple API instances where a single PostgreSQL lock isn't sufficient
 - **Seat map caching** : Redis cache for `GET /flights/{id}/seats` with cache invalidation on status change; solves the 99th percentile latency spike
 - **Kubernetes deployment** : HPA on the API pods, single ExpiryWorker pod to avoid duplicate expiry runs
 - **Idempotency keys** : prevent duplicate bookings from network retries
+- **GitHub Actions CI/CD** : push to main triggers build, ECR push, ECS service update
